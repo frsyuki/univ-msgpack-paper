@@ -1,0 +1,163 @@
+%%
+% このファイルは、筑波大学大学院システム情報工学研究科の
+% 学位論文本体のサンプルです。
+% このファイルを書き換えて、この例と同じような書式の論文本体を
+% LaTeXを使って作成することができます。
+% 
+% PC環境や、LaTeX環境の設定によっては漢字コードや改行コードを
+% 変更する必要があります。
+%%
+\documentclass[a4paper,11pt]{jreport}
+
+%%【PostScript, JPEG, PNG等の画像の貼り込み】
+%% 利用するパッケージを選んでコメントアウトしてください。
+%\usepackage{graphicx} % for \includegraphics[width=3cm]{sample.eps}
+\usepackage{epsfig} % for \psfig{file=sample.eps,width=3cm}
+%\usepackage{epsf} % for \epsfile{file=sample.eps,scale=0.6}
+%\usepackage{epsbox} % for \epsfile{file=sample.eps,scale=0.6}
+
+%% dvipdfm を使う場合(dvi->pdfを直接生成する場合)
+%\usepackage[dvipdfm]{color,graphicx}
+%% dvipdfm を使ってPDFの「しおり」を付ける場合
+%\usepackage[dvipdfm,bookmarks=true,bookmarksnumbered=true,bookmarkstype=toc]{hyperref}
+%% 参考：dvipdfm 日本語版
+%% http://hamilcar.phys.kyushu-u.ac.jp/~hirata/dvipdfm/
+
+\usepackage{times} % use Times Font instead of Computer Modern
+\usepackage{url}
+\usepackage{listings,jlisting}
+\usepackage{amssymb}  % \checkmark
+
+\lstset{
+	%language=c,
+	basicstyle=\ttfamily\scriptsize,
+	commentstyle=\textit,
+	classoffset=1,
+	keywordstyle=\bfseries,
+	frame=tRBl,
+	framesep=5pt,
+	showstringspaces=false,
+	%numbers=left,
+	%stepnumber=1,
+	%numberstyle=\tiny,
+	tabsize=2
+}
+
+\setcounter{tocdepth}{3}
+\setcounter{page}{-1}
+
+\setlength{\oddsidemargin}{0.1in}
+\setlength{\evensidemargin}{0.1in} 
+\setlength{\topmargin}{0in}
+\setlength{\textwidth}{6in} 
+%\setlength{\textheight}{10.1in}
+\setlength{\parskip}{0em}
+\setlength{\topsep}{0em}
+
+%\newcommand{\zu}[1]{{\gt \bf 図\ref{#1}}}
+
+%% タイトル生成用パッケージ(重要)
+\usepackage{sie-jp-euc}
+
+%% タイトル
+%% 【注意】タイトルの最後に\\ を入れるとエラーになります
+\title{分散システムのためのメッセージ表現手法\\に関する研究}
+%% 著者
+\author{古橋 貞之}
+%% 指導教員
+\advisor{新城靖}
+
+%% 専攻名 と 年月 (提出年月)
+%% 年月は必要に応じて書き替えてください。
+\majorfield{コンピュータサイエンス}
+\yearandmonth{2012年 3月}
+
+
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+\newpage
+
+\thispagestyle{empty}
+\vspace*{20pt plus 1fil}
+\parindent=1zw
+\noindent
+%%
+%% 論文の概要(Abstract)
+%%
+\begin{center}
+{\bf 概要}
+\vspace{5mm}
+\end{center}
+\input{0-overview}
+
+%%%%%
+\par
+\vspace{0pt plus 1fil}
+\newpage
+
+\pagenumbering{roman} % I, II, III, IV 
+\tableofcontents
+\listoffigures
+%\listoftables
+
+\pagebreak \setcounter{page}{1}
+\pagenumbering{arabic} % 1,2,3
+
+\input{1-begin}
+\input{2-related}
+\input{3-design}
+\input{4-api}
+\input{5-impl}
+\input{6-eval}
+\input{7-end}
+
+
+\chapter*{謝辞}
+\addcontentsline{toc}{chapter}{\numberline{}謝辞}
+
+本研究を行うにあたり、指導教員になっていただき、終始丁寧なご指導、貴重な助言をいただきました新城靖准教授に心より感謝申し上げます。
+加藤和彦教授、前田敦司教授、板野肯三教授、佐藤聡講師、ならびに中井央准教授には多くのご指導と助言を承りました。深く感謝申し上げます。
+またこの論文をまとめるにあたり、木村成伴准教授に多大な協力を頂きました。心から感謝申し上げます。
+また、MessagePackの開発に参加していただいた各国のコミッタの皆様、そして日々の研究においてお世話になりましたソフトウェア研究室の皆様に、感謝申し上げます。
+最後に、MessagePackをビジネスに活用しながらオープンソースソフトウェアとしてその開発に注力することを可能にしてくれた Treasure Data, Inc. の共同設立者、同僚そして投資家の皆様に、この場を借りて御礼を述べさせていただきます。
+
+%本研究を行うにあたり、ご指導をいただいた先生方に深く感謝申し上げます。
+
+
+\newpage
+
+\addcontentsline{toc}{chapter}{\numberline{}参考文献}
+\renewcommand{\bibname}{参考文献}
+
+%% 参考文献に jbibtex を使う場合
+\bibliographystyle{junsrt}
+\bibliography{rfc,furuhashi}
+%\bibliographystyle{junsrt}
+%\bibliography{samplebib}
+%% [compile] jbibtex sample; platex sample; platex sample;
+
+%%% 参考文献を直接ファイルに含めて書く場合
+%\begin{thebibliography}{1}
+%\bibitem{RakRak}
+%野寺隆志.
+%\newblock 楽々 \LaTeX.
+%\newblock 共立出版, 1990.
+%
+%\bibitem{JiyuuJizai}
+%磯崎秀樹.
+%\newblock \LaTeX 自由自在.
+%\newblock サイエンス社, July 1992.
+%
+%\bibitem{bryant-ieeetc86}
+%Randal~E. Bryant.
+%\newblock Graph-based algorithms for {B}oolean function manipulation.
+%\newblock {\em IEEE Transactions on Computers}, Vol. C-35, No.~8, pp. 677--691,
+%  August 1986.
+%\end{thebibliography}
+
+\appendix
+\input{8-appendix}
+
+\end{document}

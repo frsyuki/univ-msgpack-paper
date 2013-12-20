@@ -1,0 +1,586 @@
+
+\chapter{MessagePackの実装}
+
+%3章および4章では、MessagePackの設計と、MessagePackを様々なプログラミング言語で利用するためのバインディングの設計について述べた。本章では、それらの設計をそれぞれのプログラミング言語で実装する方法について述べる。MessagePackの実装においては、処理のオーバーヘッドが少なくなるようにし、高い処理速度を達成する。
+MessagePackの実装では、MessagePackの表現形式のデータ・ストリームを簡単に、かつ、効率よく扱う必要がある。本研究では、様々な言語でシリアライズとデシリアライズを簡単に記述できるライブラリを用意した。さらに高速にデータを扱えるようにするために、処理のオーバーヘッドが小さくなるように工夫した。この章では、Ruby、Java、およびC,C++における実装について述べる。
+
+\section{実装上の課題}
+本研究では、MessagePackをC++、Ruby、およびJavaの3つの言語において実装した。この節では、高速な実装を行うために重要なモジュールと実装上の課題について述べる。
+
+\subsection{ストリームの取り扱い}
+MessagePackの表現形式では、オブジェクトを表すデータに先立って、データの長さを格納する。このため、オブジェクトとオブジェクトの境界を区別することができる。複数のオブジェクトを次々にシリアライズして繋げたものを、{\bf MessagePackストリーム}と呼ぶ。これを図\ref{figure2-msgpack-stream}に示す。
+MessagePackストリームは、プロセス間通信を行うためのパイプやTCPソケット上で利用するプロトコルや、ログファイルのファイル構造など、複数のオブジェクトを続けて交換する必要がある場合に広く利用される。
+このため、MessagePackストリームを簡単に扱うための仕組みを実装する必要がある。
+
+%効率よく扱う手法が性能を向上させる上で重要になる。MessagePackストリームを効率よく扱うには、データをコピーしなければならない回数を削減する。
+%MessagePackの表現形式では、オブジェクトを表すデータに先立って、データの長さを格納する。このため、オブジェクトとオブジェクトの境界を区別することができる。複数のオブジェクトを次々にシリアライズして繋げたものを、{\bf MessagePackストリーム}と呼ぶ。
+
+\begin{figure}[]
+\begin{center}
+\includegraphics[scale=0.7]{figure2-msgpack-stream.eps}
+\caption{MessagePackストリーム\label{figure2-msgpack-stream}}
+\end{center}
+\end{figure}
+
+\subsection{コピーの削減}
+サイズの大きいメッセージを交換する場合、そのデータをコピーするオーバーヘッドは大きい。このため、このピーの回数を削減することが性能を向上させる上で重要になる。
+
+
+\subsection{メモリ確保の最適化}
+デシリアライザは、デシリアライズされたオブジェクトを保持するために多くのメモリを確保する。プログラミング言語処理系によっては、この負荷はバイナリデータの操作よりも大きなオーバーヘッドを生じる。従ってMessagePackの実装では、オブジェクトの確保に伴うメモリの確保やガーベージコレクタ(GC)の負荷を軽減することが、性能を向上させる上で重要になる。
+
+
+\subsection{リフレクションの削減}
+MessagePackを実装するには、型に関する情報を扱うために、実行時にそれらの型情報を取り出す機能であるリフレクションが必要になることがある。
+しかし、リフレクションはオーバーヘッドが大きく、メモリおよびCPU資源を多く消費する。従ってリフレクションの使用回数を抑えることが、性能を向上させる上で重要になる。
+
+
+\section{Ruby実装の最適化}
+
+\subsection{ストリームデシリアライザ}
+
+Ruby実装では、MessagePackストリームを扱う専用のクラスを用意した。これをストリームデシリアライザと呼ぶ。
+ストリームデシリアライザの利用方法を次に示す。
+
+%ストリームデシリアライザの基本的な利用方法は、この内部バッファにTCPソケットやログファイルから読み取ったデータをコピーし、デシリアライズを進めていく方法である。
+
+\begin{lstlisting}
+require 'msgpack'
+
+# ストリームデシリアライザをインスタンス化
+u = MessagePack::Unpacker.new
+
+# 標準入力からデータを読み取る
+while buf = STDIN.readpartial(1024)
+  # ストリームデシリアライザにデータを供給
+  u.feed(buf)
+
+  # デシリアライズを進める
+  u.each {|obj|
+    # デシリアライズされたオブジェクトを表示
+    puts "deserialized: #{obj}"
+  }
+end
+\end{lstlisting}
+
+利用者は、パイプやTCPソケットから読み取ったデータを、MessagePack::Unpacker\#feed メソッドによってストリームデシリアライザに供給していく。そしてMessagePack::Unpacker\#each メソッドによってデシリアライズを進める。このように2つのメソッドを使用するだけでMessagePackストリームを扱うことを可能とした。
+
+このような利用方法を可能にするために、ストリームデシリアライザは内部にバッファを持つ。feed メソッドによって渡されたデータは、この内部バッファにコピーしていく。このとき、必要であればrealloc関数を使用して領域を拡張する。また、ストリームデシリアライザには、MessagePackの表現形式を取り扱う有限状態遷移機械を実装した。この状態遷移機械は、内部バッファを入力データとして次々に読み取り、状態を遷移させていくことによってデシリアライズを行う。このように、MessagePackストリームの取り扱い方法をクラスの内部に隠蔽することにより、簡便なAPIでMessagePackストリームを扱えるようにした。ストリームデシリアライザの構造を図\ref{figure2-msgpack-deserializer}に示す。
+
+\begin{figure}[]
+\begin{center}
+\includegraphics[scale=0.7]{figure2-msgpack-deserializer.eps}
+\caption{ストリームデシリアライザの構造\label{figure2-msgpack-deserializer}}
+\end{center}
+\end{figure}
+
+
+\subsection{コピーの削減}
+
+feed メソッドはデータのコピーを行うため、効率が悪い。そこで、feed メソッドと each メソッドの機能を統合した feed\_each メソッドを導入した。feed\_each メソッドは、引数に与えられたデータが内部バッファに続いて繋がっていると見なして状態遷移機械にデータを入力し、デシリアライズを進める。feed\_eachメソッドの終了時に、状態遷移機械に入力されなかった端数のデータのみを内部バッファにコピーする。これによってコピーされるデータ量を削減した。利用方法を次に示す。
+
+\begin{lstlisting}
+require 'msgpack'
+
+# ストリームデシリアライザをインスタンス化
+u = MessagePack::Unpacker.new
+
+# 標準入力からデータを読み取る
+while buf = STDIN.readpartial(1024)
+  # デシリアライズを進め、余ったデータのみを内部バッファにコピーする
+  u.feed_each(buf) {|obj|
+    # デシリアライズされたオブジェクトを表示
+    puts "deserialized: #{obj}"
+  }
+end
+\end{lstlisting}
+
+
+\section{Java実装の最適化}
+
+\subsection{ストリームデシリアライザ}
+Java実装では、Ruby実装と同様にストリームデシリアライザを提供する。利用方法を次に示す。
+
+\begin{lstlisting}
+import java.io.IOException
+import org.msgpack.MessagePack;
+import org.msgpack.type.Value;
+import org.msgpack.unpacker.BufferUnpacker;
+import org.msgpack.unpacker.UnpackerIterator;
+
+public class IoEventHandler {
+    // ストリームデシリアライザをインスタンス化
+    private BufferUnpacker unpacker = new MessagePack().createBufferUnpacker();
+    private UnpackerIterator iterator = u.iterator();
+
+    public void onRead(byte[] buffer, int offset, int length) throws IOException {
+        // ストリームデシリアライザにデータを供給する
+        unpacker.feed(buffer, offset, length);
+
+        // デシリアライズを進める
+        while(iterator.hasNext()) {
+            Value obj = iterator.next();
+            // デシリアライズされたオブジェクトを表示
+            System.out.println("deserialized: "+obj);
+        }
+    }
+}
+\end{lstlisting}
+% TODO コンパイル確認
+
+利用者は、パイプやTCPソケットから読み取ったデータをBufferUnpacker::feed メソッドによってストリームデシリアライザに供給していく。そしてUnpackerIteratorを使用してデシリアライズを行う。
+
+ストリームデシリアライザの実装は、Ruby実装と同様に、内部バッファを持つ状態遷移機械である。
+
+
+\subsection{コピーの削減}
+
+OSによって最適化されたrealloc関数を利用できないJavaでは、一度確保したメモリ領域をコピーを発生させずに効率よく拡張することが難しい。メモリ領域を拡張する際にコピーが発生することを防ぐために、MessagePackのJava実装では、内部バッファの構造を、バッファチャンクのリンクトリストとした。領域の拡張が必要になった場合は、新たなバッファチャンクを確保してリンクトリストにつなぎ合わせる。
+
+% TODO 図 realloc TODO
+
+さらにJava実装では、内部バッファにソケットなどから読み取ったデータを供給する際に、コピーを行わずに単にリンクトリストにつなぎ合わせるAPIを提供した。この利用方法を次に示す。%これによってJava実装の利用者は、バッファがコピーされるタイミングを制御することができ、結果としてコピーされるデータ量を削減することができる。
+
+\begin{lstlisting}
+import java.io.IOException
+import org.msgpack.MessagePack;
+import org.msgpack.type.Value;
+import org.msgpack.unpacker.BufferUnpacker;
+import org.msgpack.unpacker.UnpackerIterator;
+
+public class IoEventHandler {
+    // ストリームデシリアライザをインスタンス化
+    private BufferUnpacker unpacker = new MessagePack().createBufferUnpacker();
+    private UnpackerIterator iterator = u.iterator();
+
+    public void onRead(byte[] buffer, int offset, int length) throws IOException {
+        // フラグをtrueにしてデータを供給すると、データはコピーされずに
+        // 内部バッファ内のリンクトリストにつなぎ合わされる
+        unpacker.feed(buffer, offset, length, true);
+
+        // デシリアライズを進める
+        while(iterator.hasNext()) {
+            Value obj = iterator.next();
+            System.out.println("deserialized: "+obj);
+        }
+    }
+}
+\end{lstlisting}
+% TODO コンパイル確認
+
+%        // 内部バッファにつなぎ合わされたバッファの参照をコピーする
+%        // 既にデシリアライズが行われたバッファはコピーされない
+%        unpacker.copyReferencedBuffer();
+
+このプログラムでは、内部バッファにデータはコピーされず、単にリンクトリストにつなぎ合わせる。これによってデシリアライズ時のコピーを削減している。
+
+%このプログラムでは、iterator.hasNext メソッドの呼び出した際に、状態遷移機械によって内部バッファのリンクトリストが消費されていく。unpacker.copyReferencedBuffer メソッドでは、ここで消費されなかった端数のバッファのみをコピーする。これによってコピーされるデータ量を削減する。
+
+%\subsection{コピーの削減}
+%JavaではOSによって最適化されたrealloc関数を利用できないことから、シリアライズを行う際にメモリ領域の拡張を繰り返すと、データのコピーが発生するため効率が悪い。
+%
+%そこでMessagePackのJava実装では、バッファチャンクのリンクトリストにシリアライズを行うAPIを提供した。これによって利用者は、複雑なプログラミングを行うことなくデータのコピー回数を削減することができる。利用例を次に示す。
+%
+%\begin{lstlisting}
+%import java.io.IOException
+%import org.msgpack.MessagePack;
+%import org.msgpack.type.Value;
+%import org.msgpack.packer.BufferPacker;
+%
+%public class MySerializeInterface {
+%    // 内部バッファ内で利用するバッファチャンクのサイズを32KBに指定
+%    private BufferPacker packer = new MessagePack().createBufferPacker(32*1024);
+%
+%    public byte[] serialize(Object target) throws IOException {
+%        // targetが巨大なデータであった場合でも、コピーの回数を最小限に抑える
+%        packer.write(target);
+%        return packer.toByteArray();
+%    }
+%}
+%\end{lstlisting}
+%% TODO コンパイル確認
+
+
+\subsection{直接型変換によるメモリ確保の最適化}
+Javaでは、CやC++のようにメモリ空間を直接編集することでオブジェクトを生成するプログラミング手法を利用できないため、メモリ確保に関わる負荷を削減することが難しい。このため、オブジェクト自体を生成しないようにすることが重要になる。
+
+MessagePackのJava実装では、型変換テンプレートを用いて型変換を行う際に、動的型付けオブジェクトを中間的に生成せずに、直接静的に宣言された型にデシリアライズできるようにするAPIを提供した。これによって中間オブジェクトの生成コストを削減する。
+
+まず、動的型付けオブジェクトを中間的に生成する利用例を次に示す。
+
+\begin{lstlisting}
+import org.msgpack.MessagePack;
+import org.msgpack.unpacker.Unpacker;
+import org.msgpack.type.Value;
+
+public class MyReader {
+    public static void main(String[] args) throws Exception {
+        MessagePack msgpack = new MessagePack();
+        Unpacker unpacker = msgpack.createUnpacker(System.in);
+
+        // デシリアライズを行って動的型付けオブジェクトを得る
+        Value obj = unpacker.read();  // 中間オブジェクト
+
+        // 静的に宣言された型に型変換を行う
+        String converted = msgpack.convert(obj, String.class);
+    }
+}
+\end{lstlisting}
+% TODO コンパイル確認
+
+このプログラムでは、デシリアライズを行って動的型付けオブジェクトを取得し、この動的型付けオブジェクトを静的に宣言された型に変換している。
+
+次に、動的型付けオブジェクトを中間的に生成せずに、直接型変換を行う利用例を次に示す。
+
+\begin{lstlisting}
+import org.msgpack.MessagePack;
+import org.msgpack.unpacker.Unpacker;
+import org.msgpack.type.Value;
+
+public class MyReader {
+    public static void main(String[] args) throws Exception {
+        MessagePack msgpack = new MessagePack();
+        Unpacker unpacker = msgpack.createUnpacker(System.in);
+
+        // デシリアライズと型変換を同時に直接行う
+        String converted = unpacker.read(String.class);
+    }
+}
+\end{lstlisting}
+% TODO コンパイル確認
+
+Unpacker.read(Class$<$T$>$) メソッドは、内部で動的型付けオブジェクトを中間的に生成することなく、直接指定されたクラスのインスタンスを作成する。これによって中間オブジェクトの生成を防ぎ、GC負荷を削減した。
+
+
+\subsection{動的コード生成によるリフレクションの削減}
+Java実装は、4章で述べた拡張可能な型変換テンプレートを提供する。このとき、型変換テンプレートの拡張を容易にするために、リフレクションを用いてクラス定義から型変換テンプレートを自動生成する機能を実装した。
+この機能を実現するために、リフレクションを使用した。与えられたクラス定義からメンバフィールドの一覧を読み出すことによって、そのクラスをシリアライズ・デシリアライズするためのプログラムを生成する。
+
+型変換テンプレートの自動生成の使用方法を次に示す。
+
+\begin{lstlisting}
+import org.msgpack.MessagePack;
+import org.msgpack.packer.BufferPacker;
+import org.msgpack.unpacker.BufferUnpacker;
+import org.msgpack.type.Value;
+
+public class MyModel {
+    // シリアライズされるメンバフィールドを定義する
+    public String name;
+    public int age;
+    public String address;
+
+    static MessagePack msgpack = new MessagePack();
+
+    static {
+        // このクラスをシリアライズするための型変換テンプレートを生成させる
+        // ここでリフレクションを使用して、上記のメンバフィールドに関する情報を読み出す
+        msgpack.register(MyModel.class);
+    }
+
+    public static void main(String[] args) throws Exception {
+        MyModel me1 = new MyModel();
+        me1.name = "Sadayuki Furuhashi";
+        me1.age = 24;
+        me1.address = null;
+
+        // シリアライズ
+        BufferPacker packer = msgpack.createBufferPacker();
+        // それぞれのメンバフィールドをシリアライズする
+        packer.write(me1);
+
+        // デシリアライズ
+        BufferUnpacker unpacker = msgpack.createBufferUnpacker(packer.toByteArray());
+        // それぞれのメンバフィールドをデシリアライズする
+        MyModel me2 = unpacker.read(MyModel.class);
+
+        System.out.println("name: "+me2.name);        //~> name: Sadayuki Furuhashi
+        System.out.println("age: "+me2.age);          //=> age: 24
+        System.out.println("address: "+me2.address);  //=> address: null
+    }
+}
+\end{lstlisting}
+% TODO コンパイル確認
+
+ここで、Javaのリフレクションはオーバーヘッドが大きいため、頻繁に実行すると性能が劣化させる要因になる。そこでMessagePackのJava実装では、まずJavaバイトコードの生成を可能にするライブラリであるJavassist\cite{Javassist}を用いて、リフレクションで取り出した型に関する情報を用から、型変換を行うバイトコードを生成する。シリアライズやデシリアライズを行う際は、リフレクションを使用せずに単にこのバイトコードを呼び出すことで、リフレクションのオーバーヘッドを削減できるようにした。
+
+%リフレクションを用いて型変換テンプレートを記述したJavaのプログラムを生成し、これをJavassist\cite{Javassist}を用いて実行時に1度だけコンパイルしてロードすることで、2度目以降の型変換ではリフレクションが不要になるようにした。
+%Javassistは、Javaのバイトコードの書き換えを可能にするライブラリであり、MessagePackでは
+
+%動的なコード生成にはJavassist\cite{Javassist}を使用した。
+
+
+\section{C,C++実装の最適化}
+
+\subsection{メモリゾーンによるメモリ確保の最適化}
+CやC++では、ポインタを使用してメモリ空間を直接編集することによってオブジェクトを生成することができる。
+メモリゾーンは、malloc関数を使用して大きなメモリ領域を一度に確保し、そこから小さなメモリを切り出して利用できるようにする機能である。オブジェクトを解放する際は、この領域を一度にfreeするだけで、細かく切り出した領域をすべて開放できる。これによってオーバーヘッドの大きいmalloc関数やfree関数の呼び出し回数を削減し、メモリ確保の負荷を削減する。
+
+実装したメモリゾーンの仕組みを、図\ref{figure-zone}に示す。
+C++実装のストリームデシリアライザは、メモリゾーンを使用してオブジェクトの保持に必要なメモリを確保する。
+
+malloc関数は複数のスレッドから同時に実行されることを想定している一方で、メモリゾーンでは単一のスレッドからのみ利用できるように制限する。通常はデシリアライズを複数のスレッドが同時に行うことはないため、この制限によって使い勝手が損なわれることは無い。
+これによって排他制御を不要にし、malloc関数よりも高速にメモリを確保できるようにした。
+
+\begin{figure}[]
+\begin{center}
+\includegraphics[scale=0.7]{figure-zone.eps}
+\caption{メモリゾーン\label{figure-zone}}
+\end{center}
+\end{figure}
+
+メモリゾーンを直接利用したプログラムの例を次に示す。
+
+\begin{lstlisting}
+/* メモリゾーンを作成 */
+/* malloc関数が呼ばれる */
+msgpack_zone* z = msgpack_zone_new(MSGPACK_ZONE_CHUNK_SIZE);
+
+/* 5つのメモリ領域を確保して利用 */
+char* m1 = msgpack_zone_malloc(z, sizeof(struct s1));
+char* m2 = msgpack_zone_malloc(z, sizeof(struct s2));
+char* m3 = msgpack_zone_malloc(z, sizeof(struct s3));
+char* m4 = msgpack_zone_malloc(z, sizeof(struct s4));
+char* m5 = msgpack_zone_malloc(z, sizeof(struct s5));
+
+/* メモリゾーンを解放 */
+/* free関数が呼ばれる */
+msgpack_zone_free(z);
+\end{lstlisting}
+
+このプログラムと同じ動作をmalloc関数を使って実現したプログラムを次に示す。
+
+\begin{lstlisting}
+/* メモリを確保する */
+/* サイズはここで固定しなければならない */
+char* all = malloc( sizeof(struct s1)+
+                    sizeof(struct s2)+
+                    sizeof(struct s3)+
+                    sizeof(struct s4));
+
+char* m1 = all;
+char* m2 = m1 + sizeof(s1);
+char* m3 = m2 + sizeof(s2);
+char* m4 = m3 + sizeof(s4);
+
+/* ここでallから追加の領域m5を切り出すことはできない */
+
+/* メモリを解放 */
+free(all);
+\end{lstlisting}
+
+このようにメモリゾーンを使用すると、一度に大きなメモリ領域を確保し、そこから小さなメモリを切り出して利用できるようにするプログラミング手法が容易に利用できるようになる。また、利用者は一度に確保するメモリ領域の大きさを意識する必要が無く、プログラムを簡潔にすることができる。メモリゾーンがない場合、利用者はこれらの管理を行うプログラムを記述しなければならない。
+
+
+
+%\begin{lstlisting}
+%/* 5つのメモリ領域を確保して利用 */
+%char* mem1 = malloc(10);  /* malloc関数が呼ばれる */
+%char* mem2 = malloc(10);  /* malloc関数が呼ばれる */
+%char* mem3 = malloc(10);  /* malloc関数が呼ばれる */
+%char* mem4 = malloc(10);  /* malloc関数が呼ばれる */
+%char* mem5 = malloc(10);  /* malloc関数が呼ばれる */
+%
+%/* 5つのメモリ領域をそれぞれ解放 */
+%free(mem1);  /* free関数が呼ばれる */
+%free(mem2);  /* free関数が呼ばれる */
+%free(mem3);  /* free関数が呼ばれる */
+%free(mem4);  /* free関数が呼ばれる */
+%free(mem5);  /* free関数が呼ばれる */
+%\end{lstlisting}
+
+%メモリを一度にたくさん確保することで、その中から小さなオブジェクトを切り出すことができ、全体のメモリを解放するとすべてのオブジェクトが解放される機能を実装した。また、シングルスレッドでしか利用できない代わりに、極めて高速に
+
+%デシリアライズされたオブジェクトは、入れ子状に配列や連想配列を多数含んでいる場合がある。このとき、配列や連想配列の要素を保持するために、メモリを確保する必要がある。このメモリをメモリゾーンから確保することで、メモリゾーンの寿命を管理するだけで、デシリアライズされたオブジェクト全体の寿命を管理できるようにした。
+%
+%また、メモリゾーン機能は複数の領域を一度に解放できるようにすることを目的としているため、細かく切り出した領域を1つ1つ開放する機能は提供しない。
+%%デシリアライズしたオブジェクトを格納するメモリを確保することを目的としており、デシリアライズ処理は
+
+
+
+
+
+%
+%\subsection{ストリームデシリアライザ}
+%Ruby実装やJava実装と同様に、C++実装でもMessagePackストリームを扱うストリームデシリアライザを実装した。
+%
+%C++実装のストリームデシリアライザは、「内部バッファ」と「デシリアライズ済み位置」を含む。内部バッファの先頭には「参照カウンタ」が入っている。内部バッファは、デシリアライズする対象のデータを供給していく領域である。デシリアライズ済み位置は、内部バッファの何バイト目までデシリアライズが完了したかを示す整数である。参照カウンタは、内部バッファが多くともいくつのスレッドから参照されているかを示す整数である。参照カウンタの初期値は1であり、これは内部バッファがデシリアライザオブジェクトからのみ参照されていることを意味する。
+%この構造を図\ref{figure-stream-deserializer-struct}に示す。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.7]{figure-stream-deserializer-struct.eps}
+%\caption{ストリームデシリアライザの構造\label{figure-stream-deserializer-struct}}
+%\end{center}
+%\end{figure}
+%
+%ストリームデシリアライズの動作を、図\ref{figure-stream-deserializer-stream}に示す。
+%ストリームデシリアライズを行うには、まず、内部バッファにデータを供給する。例えばTCPソケットからデータを受け取る場合は、readシステムコールなどを使用して内部バッファにデータを読み込む。
+%
+%%参照カウンタの増減には、CPUに実装されたアトミック命令を用いる。これにより、複数のスレッドで安全に参照カウンタを操作することができるため、デシリアライズされたオブジェクトを他のスレッドに渡して利用することを可能にする。
+%
+%次に、読み込んだデータをデシリアライズする。この処理は、ストリームデシリアライザの設計に従って、1つのオブジェクトを切り出せるまでデータを受信できていなくても、途中まで進めることができるようにした。デシリアライズ処理を進めたら、デシリアライズ済み位置を進める。
+%1つのオブジェクトを切り出せるまでデータを受信できていなければ、さらにバッファにデータを読み込んで、デシリアライズ処理を進める。
+%1つのオブジェクトを切り出すことができたら、切り出されたされたオブジェクトを取り出す。このとき、参照カウンタをインクリメントする。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.7]{figure-stream-deserializer-stream.eps}
+%\caption{ストリームデシリアライズ\label{figure-stream-deserializer-stream}}
+%\end{center}
+%\end{figure}
+%
+%\subsubsection{バッファの共有による最適化}
+%1つのバッファは、複数のオブジェクトを同時に保持できるようにした。これにより、切り出されたオブジェクトを別のスレッドで利用している間に、新しいバッファを確保せずに、次のオブジェクトを受信してデシリアライズすることができる。この動作を図\ref{figure-stream-deserializer-share}に示す。1つのバッファに複数のオブジェクトを同時に含める場合は、参照カウンタをインクリメントする。
+%
+%この実装により、新しいバッファを確保する回数（すなわちmallocを呼び出す回数）を減らすことができる。これにより、メモリ確保に必要な負荷を削減でき、また、メモリの断片化を抑制することができる利点がある。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.7]{figure-stream-deserializer-share.eps}
+%\caption{バッファの共有\label{figure-stream-deserializer-share}}
+%\end{center}
+%\end{figure}
+%
+%\subsubsection{バッファの再利用による最適化}
+%デシリアライズされたオブジェクトが解放され、バッファが他のどのスレッドからも参照されなくなったら、バッファを最初に巻き戻して再利用できるようにした。この動作を図\ref{figure-stream-deserializer-rewind}に示す。
+%
+%オブジェクトを解放したときは、参照カウンタをデクリメントする。切り出されたオブジェクトがすべて解放されると、参照カウンタは1になる。
+%
+%参照カウンタが1であり、デシリアライザが解放されていないということは、バッファはデシリアライザオブジェクトからしか参照されていないことを意味する。このため、バッファを安全に巻き戻すことができる。
+%
+%バッファを再利用すると、新しいバッファを確保する回数を減らすことができる。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.7]{figure-stream-deserializer-rewind.eps}
+%\caption{オブジェクトの解放とバッファの巻き戻し\label{figure-stream-deserializer-rewind}}
+%\end{center}
+%\end{figure}
+%
+%バッファが他のどのスレッドからも参照されなくなったことの判定は、オブジェクトを解放した場合とデシリアライザオブジェクトを解放した場合に、参照カウンタをデクリメントすることで行う。参照カウンタをデクリメントした結果、参照カウンタが0になった場合のみ、バッファを解放する。この動作を図\ref{figure-stream-deserializer-free}に示す。
+%
+%%デシリアライザオブジェクトを解放しても、他のスレッドからバッファが利用されている可能性があれば、バッファは解放しない。このため、切り出されたオブジェクトが他のスレッドから利用されている間でも、デシリアライザオブジェクトを解放することができる。これにより、切り出されたオブジェクトを扱うコードと、デシリアライザオブジェクトを扱うコードを分離できるため、プログラムの保守が容易になる利点がある。
+%
+%%参照カウンタが0になるのは、バッファがどのスレッドからも参照されなくなったときだけである。このため安全にバッファを解放することができる。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.7]{figure-stream-deserializer-free.eps}
+%\caption{オブジェクトの解放とバッファの解放\label{figure-stream-deserializer-free}}
+%\end{center}
+%\end{figure}
+%
+%
+%
+
+
+
+
+%\subsection{ストリームシリアライザ}
+%オブジェクトをシリアライズするとき、シリアライズされたバイト列をバッファに書き出していくほかに、バイト列を任意の出力先に直接出力できるようにする。この機能を{\bf ストリームシリアライザ}と呼ぶ。
+%
+%ストリームシリアライザの構造を、図\ref{figure-stream-serializer}に示す。一度バッファに書き出してからTCPソケットなどの出力先に出力すると、データのコピーが発生する。
+%%一度バッファに書き出してから別のストリームに出力すると、データのコピーが発生する。出力先のストリームがバッファリング機能を実装している場合や、バッファリングを行う必要が無いほど高速なストリームに出力する場合は、このコピーは無駄になる。
+%ストリームシリアライザ機能によってこのコピーを不要にすることで、シリアライズ処理を高速化することを可能にする。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.6]{figure-stream-serializer.eps}
+%\caption{ストリームシリアライザ\label{figure-stream-serializer}}
+%\end{center}
+%\end{figure}
+
+%\subsection{ストリームデシリアライザ}
+%MessagePackでは、1つのオブジェクトをデシリアライズするためのデータがすべて揃っていない状態でも，デシリアライズ処理を途中まで進められるようにする。
+%また、データのサイズや型の情報などの付加的な情報を必要とせずに、１つのオブジェクトをデシリアライズするためのデータが揃ったことを、MessagePackを利用するプログラムが検出できるようにする。
+%この機能を{\bf ストリームデシリアライザ}と呼ぶ。
+
+%この機能によって、
+%MessagePackでシリアライズされたデータをTCPソケットやパイプなどのストリームを通じて受信する際に、
+%1つのオブジェクトをデシリアライズするデータをすべて受信しきる前でも、後に続くデータを待ち受けている間に、デシリアライズ処理を途中まで進めておくことができる。これによって、データを受信する処理とデシリアライズ処理を並列して行うことを可能にし、デシリアライズ処理に要する遅延を隠蔽することを可能にする。これはシリアライズされたデータをTCPソケットやパイプなどのストリームを通じて受信する際に有用である。
+
+%またこの機能によって、ストリームを通じてMessagePackでシリアライズされたデータを送信する際に、そのデータの長さをあらかじめ送信する必要が無くなる。また、データを受信する際に、データの長さを最初に受信する必要が無くなる。
+%これにより、ストリームを通じてメッセージを交換するプログラムを簡潔に書けるようにする。
+%これにより、ストリームデシリアライザのAPIの呼び出し以外に何の機能も実装することなく、ストリームを通じてオブジェクトを受信するプログラムを実装することを可能にする。
+
+%イベント駆動I/Oでプロトコルを解析するには、「データを次々に投げ込んでいくと内部の状態が遷移していき、ゴールの状態にたどり着くとパース完了」というタイプのパーサが必要になる。簡単なバイナリプロトコルなら「ヘッダ部を受信中」と「データ部を受信中」の２つくらいしか状態がないので手で書いても良いが、複雑なプロトコルだと凄まじく面倒。
+
+
+%\subsection{インライン化による最適化}
+%シリアライザテンプレートとデシリアライザテンプレートは、マクロを使う代わりに、関数呼び出しや、関数ポインタを経由した関数呼び出しを使っても実装できる。しかし、関数呼び出しにはオーバーヘッドが伴う。マクロを使ってコンパイラが関数をインライン化できるようにすることで、関数呼び出しに伴うオーバーヘッドを削減できるようにした。
+
+
+%\subsection{メモリゾーンによる最適化}
+%デシリアライズ機能と同様に、C++実装のメモリゾーン機能は、C実装のメモリゾーン機能で実装した構造体を継承してC++言語のクラスを作成することで実装した。
+%
+%メモリゾーンの仕組みを、図\ref{figure-zone}に示す。メモリゾーンは、mallocを使って大きなメモリ領域を一度に確保し、そこから小さなメモリを切り出して利用できるようにする。メモリゾーンは、mallocを使って確保したメモリをfreeするだけで、細かく切り出した領域をすべて開放できる。
+%
+%%メモリを一度にたくさん確保することで、その中から小さなオブジェクトを切り出すことができ、全体のメモリを解放するとすべてのオブジェクトが解放される機能を実装した。また、シングルスレッドでしか利用できない代わりに、極めて高速に
+%
+%デシリアライズされたオブジェクトは、入れ子状に配列や連想配列を多数含んでいる場合がある。このとき、配列や連想配列の要素を保持するために、メモリを確保する必要がある。このメモリをメモリゾーンから確保することで、メモリゾーンの寿命を管理するだけで、デシリアライズされたオブジェクト全体の寿命を管理できるようにした。
+%
+%また、メモリゾーン機能は複数の領域を一度に解放できるようにすることを目的としているため、細かく切り出した領域を1つ1つ開放する機能は提供しない。
+%また、1つのデシリアライザのインスタンスは複数のスレッドから同時に利用されないことから、複数のスレッドから同時にメモリを確保できないようにする。
+%%デシリアライズしたオブジェクトを格納するメモリを確保することを目的としており、デシリアライズ処理は
+%これらの機能を提供しないという特性を利用して、mallocよりも高速にメモリを確保できるようにした。
+
+%またこのとき、1つのメモリゾーンは、同時に1つのスレッドからのみ利用される。このため、メモリゾーンからメモリを切り出すときには、排他制御が必要ない。このため、高速にメモリを切り出すことができる。メモリゾーンからメモリを確保する速度と、mallocを使ってメモリを確保する速度を比較した結果を、図\ref{figure-misc-zone}に示す。これは、128バイトのメモリを100万回確保する速度を計測することで、128バイトのメモリを1回するのにかかる時間を計測したものである。ここで実装したメモリゾーン（msgpack\_zone）は、mallocと比べてずっと高速であることが分かる。
+
+%Objective-Cの「ゾーン」の概念をC++で再実装したもの。
+%%http://journal.mycom.co.jp/column/objc/059/index.html
+%%http://developer.apple.com/mac/library/documentation/Performance/Conceptual/ManagingMemory/Articles/MemoryAlloc.html
+%%http://developer.apple.com/mac/library/documentation/Performance/Conceptual/ManagingMemory/Articles/MemoryAlloc.html#//apple_ref/doc/uid/20001881-100720
+%%http://projects.autonomy.net.au/ai/chrome/site/resource/ebooks-programming/cocoa/cocoa-programming.pdf
+%%http://svnbook.red-bean.com/en/1.0/ch08s05.html
+%・メモリゾーンの説明
+%・参照の局所性？
+%・・ゾーンの中に、互いに関係しているオブジェクトをまとめておく
+%・メモリプール
+%・・ゾーンを開放すると、ゾーンの中にまとめられたオブジェクトがすべて解放される
+%・・ゾーンひとつだけ管理するだけで、オブジェクトすべての寿命を管理できる
+%・・アプリケーションの実装を簡略化
+%・シングルスレッド専用のメモリアロケータ
+%・・参照：Efficient C++
+%・・メモリ確保の高速化
+%・・malloc(3)と比べて圧倒的に高速
+
+%メモリゾーンを使うと、細かく確保した領域の寿命を個別に管理しなくて済む。
+
+%\subsection{シリアライズのコピー削減}
+%ゼロ・コピーバッファは、シリアライズされたバイト列を、必ずしも連続していないバッファの配列としてシリアライズするモジュールである。シンプルバッファと比べると、コピーの回数を削減することができるため、高速に動作する。
+%
+%ゼロ・コピーバッファの実装を図\ref{figure-vrefbuffer}に示す。ゼロ・コピーバッファは「内部バッファ」と「iovec配列」からなる。シリアライズされたバイト列を保存するとき、バイト列が短ければ、まず内部バッファにコピーし、そのコピーしたバッファへの参照をiovec配列に追加する。バイト列が長ければ、内部バッファにコピーせずに、iovec配列に参照を追加する。これによって、バイト列が長い場合は、コピーの回数を削減できる。バイト列が短い場合に内部バッファにコピーするのは、iovec配列に追加するときに、iovec配列の1つの要素自体のコピーが発生するために、短いバイト列への参照をiovec配列に追加していくと性能が劣化するためである。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.7]{figure-vrefbuffer.eps}
+%\caption{ゼロ・コピーバッファ\label{figure-vrefbuffer}}
+%\end{center}
+%\end{figure}
+
+
+
+%\subsubsection{簡易デシリアライザ} %FIXME
+%\begin{verbatim}
+%typedef enum {
+%	MSGPACK_UNPACK_SUCCESS				=  2,
+%	MSGPACK_UNPACK_EXTRA_BYTES			=  1,
+%	MSGPACK_UNPACK_CONTINUE				=  0,
+%	MSGPACK_UNPACK_PARSE_ERROR			= -1,
+%} msgpack_unpack_return;
+%
+%msgpack_unpack_return
+%msgpack_unpack(const char* data, size_t len, size_t* off,
+%		msgpack_zone* z, msgpack_object* result);
+%\end{verbatim}
+
+
+% テンプレートメタプログラミングによる型変換テンプレートのインライン化
+
+
+%\subsection{実装の共有}
+%多くのプログラミング処理系がCは実装され、Cによってその機能を拡張できることから、MessagePackのC実装は、他の言語の実装から利用されることがある。これを考慮し、
+%
+%TODO C実装は、他の言語の実装の実装から利用されることが良くある。それを考慮して、他の言語の実装から利用されることを想定したプログラムも作成した。現にこのコードはRuby版、Perl版、Luaなどで利用されている。マクロによる実装で、インライン化されるため高速。
+

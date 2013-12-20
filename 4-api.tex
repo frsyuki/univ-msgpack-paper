@@ -1,0 +1,307 @@
+
+\chapter{プログラミング言語バインディング}
+
+%その型システムに基づくオブジェクトをネットワークやファイルを経由して交換するために使用する
+３章では、「MessagePackの型システム」と、その型システムのバイナリ列によって表現する「MessagePackの表現形式」について述べた。この章では、様々なプログラミング言語へのバインディングについて述べる。その特徴は、第１に、静的な型付けを採用するプログラミング言語においても、MessagePackの型システムに基づいた動的な型付けを利用可能にした点にある。第２の特徴は、型変換テンプレートと呼ぶ機構を導入することによって、MessagePackの型システムと各言語の型システムの相互変換を可能にした点にある。
+
+
+\section{動的型付けオブジェクトAPI}
+
+3章で述べたように、MessagePackではシリアライズされたバイト列の中に型の情報を含める。この型は必ずしも静的には決定せず、デシリアライズを行う実行時になって初めて決定する。%このため、デシリアライズされるオブジェクトは動的型付けオブジェクトになる。
+
+このような動的型付けオブジェクトを使用すると、オブジェクトの型を利用した柔軟なプログラミングが可能になる。例えば、受け取ったデータの型がRaw型である場合とInteger型である場合で異なる処理を行うようなプログラムを記述できる。このようなプログラミング手法は、他のソフトウェアと通信の相互互換性を保ったままプログラムを更新していく必要がある分散システムにおいて特に有効である。
+
+MessagePackでは、この動的型付けオブジェクトの特性を利用できるようにするために、MessagePackの型システムを実装したAPIをライブラリとして提供した。これによって、静的な型付けを採用するプログラミング言語においても、MessagePackの型システムに基づいた動的な型付けを利用することが可能になる。このAPIを動的型付けオブジェクトAPIと呼ぶ。
+%このAPIによって、静的型付け言語であっても動的型付けオブジェクトを利用することができる。
+
+C++で、動的型付けオブジェクトAPIを使用し、デシリアライズしたオブジェクトの型によって処理を分岐するプログラムを次に示す。
+
+\begin{lstlisting}
+#incldue <iostream>
+#include <memory>
+#include <msgpack.hpp>
+
+void use_integer(msgpack::object obj) {
+    // short型に変換して扱う
+    short n = obj.as<short>();
+}
+
+void process(msgpack::object obj, std::auto_ptr<msgpack::zone> z)
+try {
+    if(obj.type == msgpack::type::ARRAY) {
+        // 実際の型が配列なら配列の要素に対してuse_integer()を複数回呼び出していく
+        msgpack::object_array array = obj.via.array;
+        for(int i=0; i < array.size; i++) {
+            use_integer(array.ptr[i]);
+        }
+    } else {
+        // そうでなければuse_integer()を1回呼び出す
+        use_integer(obj);
+    }
+} catch (msgpack::type_error&) {
+    // 型変換に失敗した場合は例外が発生する
+    std::out << "expected integer or array of integer: " << std::endl;
+}
+
+int main(void) {
+    msgpack::unpacker unpacker;
+
+    while(true) {
+        // 標準入力からデータを読み出す
+        unpacker.reserve_buffer(32*1024);
+        size_t len = std::in.readsome(
+            unpacker.buffer(), unpacker.buffer_capacity());
+        unpacker.buffer_consumed(len);
+
+        // デシリアライズを行って動的型付けオブジェクトを得る
+        while(unpacker.execute()) {
+            std::auto_ptr<msgpack::zone> z(unpacker.release_zone());
+            msgpack::object obj = unpacker.data();  // 動的型付けオブジェクト
+            unpacker.reset();
+
+            process(obj, z);
+        }
+    }
+}
+\end{lstlisting}
+
+%msgpack::objectクラスが動的型付けオブジェクトを表現する。
+
+同様の処理をJavaで実装したプログラムを次に示す。
+
+\begin{lstlisting}
+import org.msgpack.MessagePack;
+import org.msgpack.unpacker.Unpacker;
+import org.msgpack.type.Value;
+import org.msgpack.type.IntegerValue;
+
+public class MyReader {
+    public static void main(String[] args) throws Exception {
+        // デシリアライズを行って動的型付けオブジェクトを得る
+        Unpacker unpacker = new MessagePack().createUnpacker(System.in);
+        Value obj = unpacker.read();  // 動的型付けオブジェクト
+
+        try {
+            if(obj.isArrayValue()) {
+                // 実際の型が配列なら配列の要素に対して
+                // useInteger()を複数回呼び出していく
+                for(Value v : obj.asArrayValue()) {
+                    useInteger(v.asIntegerValue());
+                }
+            } else {
+                // そうでなければuseInteger()を1回呼び出す
+                useInteger(obj.asIntegerValue());
+            }
+        } catch (MessageTypeException ex) {
+            // 型変換に失敗した場合は例外が発生する
+            System.out.println("expected integer or array of integer: "+ex);
+        }
+    }
+
+    // IntegerValueを使用して処理を行う
+    public void useInteger(IntegerValue iv) {
+        // short型に変換して扱う
+        Number num = iv;
+        short s = num.shortValue();
+        System.out.println(s);
+    }
+}
+\end{lstlisting}
+% TODO コンパイル確認
+
+%このプログラムでは、org.msgpack.type.Valueクラスが動的型付けオブジェクトを表現する。
+
+動的型付けオブジェクトには、静的に宣言された型に変換するメソッドを実装している。この変換が失敗した場合、すなわち想定していた型と実際に動的に決定された型が異なっていた場合は、例外を発生させる。
+
+またMessagePackのJava実装では、動的型付けオブジェクトはequalsやhashCodeを正しく実装している。このため静的に宣言された型に変換することなく、同一性を判定したりHashMapのキーとして利用したりすることができる。この例を次に示す。
+
+\begin{lstlisting}
+import java.util.HashSet;
+import java.util.ArrayList;
+import org.msgpack.MessagePack;
+import org.msgpack.unpacker.Unpacker;
+import org.msgpack.type.Value;
+import org.msgpack.type.IntegerValue;
+
+public class MyReader {
+    public static void main(String[] args) throws Exception {
+        HashSet<Value> unique = new HashSet<Value>();
+        ArrayList<Value> all = new ArrayList<Value>();
+
+        // ストリームデシリアライザを使用して、MessagePackストリームから
+        // オブジェクトを次々にデシリアライズする
+        Unpacker unpacker = new MessagePack().createUnpacker(System.in);
+        for(Value obj : unpacker) {
+            // HashSetにaddすることができる
+            // 同一性判定はMessagePackの型システムに基づいて行われる
+            unique.add(obj);
+            all.add(obj);
+        }
+
+        int duplicated = all.size() - unique.size();
+        System.out.println("num of duplicated values: "+duplicated);
+    }
+}
+\end{lstlisting}
+% TODO コンパイル確認
+
+
+\section{型変換テンプレート}
+
+%シリアライズ後のデータに型情報を格納する場合、デシリアライズされる型は実行時に決定する。しかし、このようにして得られた動的に型付けされたオブジェクトは、
+前節で述べた利点がある一方で、C++やJavaなどの静的型付け言語では、動的に型付けられたオブジェクトを簡単に扱う仕組みがないため、動的型付けオブジェクトは扱いにくい。
+
+そこでMessagePackでは、デシリアライズされた動的型付けオブジェクトを静的に宣言された型に変換するAPIをライブラリとして提供した。これによってMessagePackの利用者は、型検査を行うプログラムを自分で記述することなく、デシリアライズされたオブジェクトを静的な型に変換して安全に扱うことが可能になる。
+
+この機能は、プログラミング言語の型システムからMessagePackの型システムへ（シリアライズ時）、またはMessagePackの型システムからプログラミング言語への型システムへ（デシリアライズ時）への射影関数を導入することを意味する。%各種の言語によるMessagePackの実装は、厳密な射影関数の定義を必ず含む。
+MessagePackでは、この型変換を行う射影関数の実装を型変換テンプレートと呼ぶ。
+
+%TODO 図? TODO
+
+%IDLを使用しないことから、デシリアライズされたオブジェクトの型は実行時に初めて決定することになるが、CやJavaなどの静的型付け言語では、そのような動的型付けオブジェクトは非常に扱いにくい。デシリアライズされたJSONオブジェクトを静的な型に変換するには、型検査を行う単調なプログラミングが多く必要になる。
+
+%それぞれのプログラミング言語の型システムと、MessagePackの型システムは、一致しない。そのためシリアライズ時には言語の型システムからMessagePackの型システムは、デシリアライズ時にはMessagePackの型システムから言語の型システムに対して、射影を行う必要がある。
+
+%IDLを使用しないことから、デシリアライズされたオブジェクトの型は実行時に初めて決定することになるが、CやJavaなどの静的型付け言語では、そのような動的型付けオブジェクトは非常に扱いにくい。デシリアライズされたJSONオブジェクトを静的な型に変換するには、型検査を行う単調なプログラミングが多く必要になる。
+
+
+%C++で、型変換テンプレートを用いて動的型付けオブジェクトを静的に宣言された型に変換する例を示す。
+%
+%\begin{lstlisting}
+%TODO 使用例 C++：MessagePackで標準的に提供されるAPIを用いて型変換する例：std::vector<int> とか
+%\end{lstlisting}
+%
+%ここではデシリアライズされたオブジェクトを std::vector<int>、すなわち整数の配列に変換している。std::vector<T>やint型に対する型変換テンプレートは、MessagePackのライブラリによって提供されているものであり、ユーザーが記述する必要は無い。
+%
+%同様の処理をJavaで実装した例を示す。
+Javaで、型変換テンプレートを用いて動的型付けオブジェクトを静的に宣言された型に変換する例を示す。
+
+\begin{lstlisting}
+import org.msgpack.MessagePack;
+import org.msgpack.unpacker.Unpacker;
+import org.msgpack.type.Value;
+import org.msgpack.type.IntegerValue;
+
+public class MyReader {
+    static MessagePack msgpack = new MessagePack();
+
+    public static void main(String[] args) throws Exception {
+        // デシリアライズを行う
+        Unpacker unpacker = msgpack.createUnpacker(System.in);
+        Value obj = unpacker.read();
+
+        // 動的型付けオブジェクトからint型の配列へと型変換を行う
+        int[] converted = msgpack.convert(obj, int[].class);
+}
+\end{lstlisting}
+% TODO コンパイル確認
+
+
+\subsection{型変換テンプレートの拡張}
+
+MessagePackでは、型変換テンプレートを利用者が拡張できるようにした。これによって、ユーザーが独自に定義したクラスに対する射影関数を導入することが可能になる。MessagePackの利用者は、MessagePackが提供する枠組みを使用して型変換を行う処理を記述すれば、プログラミング言語で標準的に提供されている他の型とまったく同じように独自クラスのインスタンスをシリアライズ・デシリアライズすることが可能になる。
+
+また同時に、型変換テンプレートを拡張可能なように実装しておくことで、プログラミング言語が更新された際に追加された型に対する射影関数を導入することが容易になるという利点も得らる。
+
+%C++で、型変換テンプレートを拡張することにより、多倍長整数を扱えるようにする例を示す。
+%
+%\begin{lstlisting}
+%TODO 使用例 C++：多倍長整数を扱えるようにする例を示す：std::vector<mpz\_class> とか
+%\end{lstlisting}
+%
+%ここでは多倍長整数のライブラリとしてGMPを用いた(TODO 出典追加)。GMPが提供するmpz\_classクラスに対する型変換テンプレートは、MessagePackのライブラリによって提供されていないため、そのままではユーザーは型変換を行うことができない。しかし、MessagePackでは型変換テンプレートを拡張することが可能である。
+%
+%同様の処理をJavaで実装した例を次に示す。
+Javaで、型変換テンプレートを拡張することにより、多倍長整数を扱えるようにする例を示す。
+
+\begin{lstlisting}
+import java.io.IOException;
+import java.math.BigInteger;
+import org.msgpack.MessagePack;
+import org.msgpack.packer.Packer;
+import org.msgpack.packer.BufferPacker;
+import org.msgpack.unpacker.Unpacker;
+import org.msgpack.unpacker.BufferUnpacker;
+import org.msgpack.template.AbstractTemplate;
+import org.msgpack.MessageTypeException;
+import org.msgpack.type.Value;
+
+public class MyModel {
+    static MessagePack msgpack = new MessagePack();
+
+    // 型変換テンプレートを定義
+    public static class BigIntegerTemplate extends AbstractTemplate<BigInteger> {
+        public BigIntegerTemplate() {}
+
+        public void write(Packer pk, BigInteger target, boolean required)
+                throws IOException {
+            if (target == null) {
+                if (required) {
+                    throw new MessageTypeException("Attempted to write null");
+                }
+                pk.writeNil();
+                return;
+            }
+            pk.write((BigInteger) target);
+        }
+
+        public BigInteger read(Unpacker u, BigInteger to, boolean required)
+                throws IOException {
+            if (!required && u.trySkipNil()) {
+                return null;
+            }
+            return u.readBigInteger();
+        }
+    }
+
+    static {
+        // 型変換テンプレートを登録する
+        msgpack.register(BigInteger.class, new BigIntegerTemplate());
+    }
+
+    public static void main(String[] args) throws Exception {
+        // デシリアライズを行う
+        Unpacker unpacker = msgpack.createUnpacker(System.in);
+        Value obj = unpacker.read();
+
+        // 動的型付けオブジェクトからBigIntegerへの型変換が可能になる
+        BigInteger converted = msgpack.convert(obj, BigInteger.class);
+    }
+}
+\end{lstlisting}
+% TODO コンパイル確認
+
+型変換テンプレートを拡張することで、MessagePackによって標準的に提供されていない型でも型変換が可能になる。また、その使い勝手は型変換テンプレートの拡張を用いない前節の型変換と同じである。
+
+
+\subsection{実装の難易度と実装の段階的な拡張}
+以上のように拡張な型変換テンプレートを実装することでAPIの使い勝手は向上するが、その実装は難しい。
+しかし、型変換テンプレートは実装されていなくてもMessagePackの利用は可能である。この場合、利用者は動的に型付けられたオブジェクトを直接利用することになる。特に動的型付け言語においては、動的型付けオブジェクトを直接扱うことは容易である。言い換えれば、拡張可能な型変換テンプレートは後付け可能な機能である。
+%選択可能である。
+
+3章で述べたように、MessagePackの型システムでは少数のデータ型のみを提供する。このため、MessagePackは機能が制限された最小限の実装は容易に開発できる一方で、後から段階的に拡張していくことで、使い勝手を向上させることができる。
+
+%以上のように型変換テンプレートを使用すると、動的型付けオブジェクトを柔軟な方法で静的な型に変換し、安全に使用することができることが確認できた。
+
+%\section{JSONとの互換性}
+%
+%JSONの処理系は既に広く使われており、多くの開発者に習熟されている。そのようなJSON処理系と似たAPIを提供することで、使い勝手を向上させた。
+%
+%\subsection{JSONとMessagePackの透過的な切り替え}
+%
+%MessagePackのJava実装では、MessagePackとまったく同じAPIでJSONを扱えるようにした。これにより、JSONとMessagePackを透過的に切り替えて利用することが可能になった。MessagePackを利用する開発者は、他のソフトウェアとのインタフェースとしてJSONとMessagePackの両方を選択可能にすることで、相互運用性を高めることができる。
+
+
+%JSONのシリアライザとデシリアライザに差し替えられるようにすることで、
+
+%TODO 他のシステムとの相互運用性を高める
+%
+%TODO 移行を容易にする
+%
+%
+%\section{APIの評価}
+%
+%TODO APIの評価
+%
+%TODO Smalltalk版 http://stomp.smalltalk-users.jp/
+

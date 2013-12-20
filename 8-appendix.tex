@@ -1,0 +1,216 @@
+
+%\appendix
+%\appendixname{付録}
+%\def\thesection{付録\Alph{section}}
+%\def\thesection{付録\Alph{section}}
+
+%\section{MessagePackの表現形式}
+%\addcontentsline{toc}{chapter}{\numberline{}付録A}
+%\def\thechapter{付録A.}
+%\def\thesection{付録\Alph{section}}
+%\def\thesection{付録}
+\chapter{MessagePackの表現形式}
+%\def\thechapter{\arabic{chapter}}
+MessagePackで扱うデータ型の表現形式について示す。
+
+複数のバイトからなるデータを保存する場合は、エンディアンが問題になる。MessagePackでは、ネットワークバイトオーダーを用いる。
+
+ここでは次のような表記を用いて表現形式を表す。以下に示す箱は、1バイトを表す。
+\begin{lstlisting}
++--------+
+|        |
++--------+
+\end{lstlisting}
+
+次に以下す箱は、可変長バイトを表す。
+\begin{lstlisting}
++================+
+|                |
++================+
+\end{lstlisting}
+
+
+\section{Nil}
+Nilは、0xc0で表す。
+\begin{lstlisting}
++--------+
+|  0xc0  |
++--------+
+\end{lstlisting}
+
+\section{Boolean}
+Booleanは、TrueかFalseを表す。
+Trueは、0xc3で表す。
+\begin{lstlisting}
++--------+
+|  0xc3  |
++--------+
+\end{lstlisting}
+
+Falseは、0xc2で表す。
+\begin{lstlisting}
++--------+
+|  0xc2  |
++--------+
+\end{lstlisting}
+
+
+\section{Integer}
+Integerは、10種類の表現形式を持つようにした。
+
+\subsection{Positive Fixnum}
+Positive Fixnumは、[0, 127]の範囲の整数を1バイトで保存する。1バイトのうち、先頭の1ビットは0で、それ以降のビットで整数値を表す。
+\begin{lstlisting}
++--------+
+|0XXXXXXX|
++--------+
+\end{lstlisting}
+
+\subsection{Negative Fixnum}
+Negative Fixnumは、[-32, -1]の範囲の整数を1バイトで保存する。1バイトのうち、先頭の3ビットは111で、それ以降のビットで整数値を表す。
+\begin{lstlisting}
++--------+
+|111XXXXX|
++--------+
+\end{lstlisting}
+
+\subsection{uint 8、uint 16、uint 32、uint 64}
+uint 8、uint 16、uint 32、uint64は、それぞれ符号無し8ビット、16ビット、32ビット、64ビットの整数を、それぞれ2バイト、3バイト、5バイト、9バイトで保存する。先頭の1バイトは、それぞれ0xcc、0xcd、0xce、0xcfで、それ以降のバイトで整数値を表す。
+\begin{lstlisting}
+unsigned 8-bit interger
++--------+--------+
+|  0xcc  |XXXXXXXX|
++--------+--------+
+
+unsigned 16-bit integer
++--------+--------+--------+
+|  0xcd  |XXXXXXXX|XXXXXXXX|
++--------+--------+--------+
+
+unsigned 32-bit integer
++--------+--------+--------+--------+--------+
+|  0xce  |XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|
++--------+--------+--------+--------+--------+
+
+unsigned 64-bit integer
++--------+--------+--------+--------+--------+--------+--------+--------+--------+
+|  0xcf  |XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|
++--------+--------+--------+--------+--------+--------+--------+--------+--------+
+\end{lstlisting}
+
+\subsection{int 8、int 16、int 32、int 64}
+int 8、int 16、int 32、int64は、それぞれ符号付き8ビット、16ビット、32ビット、64ビットの整数を、それぞれ2バイト、3バイト、5バイト、9バイトで保存する。先頭の1バイトは、それぞれ0xd0、0xd1、0xd2、0xd3で、それ以降のバイトで整数値を表す。
+\begin{lstlisting}
+signed 8-bit integer
++--------+--------+
+|  0xd0  |XXXXXXXX|
++--------+--------+
+
+signed 16-bit integer
++--------+--------+--------+
+|  0xd1  |XXXXXXXX|XXXXXXXX|
++--------+--------+--------+
+
+signed 32-bit integer
++--------+--------+--------+--------+--------+
+|  0xd2  |XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|
++--------+--------+--------+--------+--------+
+
+signed 64-bit integer
++--------+--------+--------+--------+--------+--------+--------+--------+--------+
+|  0xd3  |XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|
++--------+--------+--------+--------+--------+--------+--------+--------+--------+
+\end{lstlisting}
+
+
+\section{Float}
+Floatは、2種類の表現形式を持つようにした。
+
+\subsection{float}
+floatは、IEEE 754形式の単精度二進化浮動小数点数\cite{IEE754}を5バイトで保存する。先頭の1バイトは0xcaで、それ以降のバイトで浮動小数点数を表す。
+\begin{lstlisting}
++--------+--------+--------+--------+--------+
+|  0xca  |XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|
++--------+--------+--------+--------+--------+
+\end{lstlisting}
+
+\subsection{double}
+doubleは、IEEE 754形式の倍精度二進化浮動小数点数\cite{IEE754}を9バイトで保存する。先頭の1バイトは0xcbで、それ以降のバイトで浮動小数点数を表す。
+\begin{lstlisting}
++--------+--------+--------+--------+--------+--------+--------+--------+--------+
+|  0xcb  |XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|
++--------+--------+--------+--------+--------+--------+--------+--------+--------+
+\end{lstlisting}
+
+\section{Raw}
+Rawは、3種類の表現形式を持つようにした。
+
+\subsection{FixRaw}
+FixRawは、最大31バイトのバイト列を、(バイト列の長さ+1)バイトで保存する。先頭の1バイトでバイト列の長さを表し、それ以降にバイト列を保存する。先頭の1バイトのうち、先頭の3ビットは101で、それ以降のビットでバイト列の長さを表す。
+\begin{lstlisting}
++--------+================+
+|101XXXXX|    N bytes     |
++--------+================+
+\end{lstlisting}
+
+\subsection{raw 16、raw 32}
+raw 16、raw 32は、それぞれ最大$(2^{16})-1$バイト、最大$(2^{32})-1$バイトのバイト列を、それぞれ(バイト列の長さ+3)バイト、(バイト列の長さ+5)バイトで保存する。先頭の1バイトはそれぞれ0xda、0xdbで、続く2バイトまたは4バイトでバイト列の長さを表す。
+\begin{lstlisting}
++--------+--------+--------+================+
+|  0xda  |XXXXXXXX|XXXXXXXX|    N bytes     |
++--------+--------+--------+================+
+
++--------+--------+--------+--------+--------+================+
+|  0xdb  |XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|    N bytes     |
++--------+--------+--------+--------+--------+================+
+\end{lstlisting}
+
+
+\section{Array}
+Arrayは、3種類の表現形式を持つようにした。
+
+\section{FixArray}
+FixArrayは、最大15要素の配列を保存する。先頭の1バイトで要素数を表し、後続する要素数個分のオブジェクトを配列の要素とする。先頭の1バイトのうち、先頭の4ビットは1001で、後続するビットで要素数を表す。
+\begin{lstlisting}
++--------+================+
+|1001XXXX|   N objects    |
++--------+================+
+\end{lstlisting}
+
+\subsection{array 16、array 32}
+array 16、array 32は、それぞれ最大$(2^{16})-1$要素、$(2^{32})-1$要素の配列を保存する。先頭の1バイトはそれぞれ0xdc、0xddで、続く2バイトまたは4バイトで要素数を表し、後続する要素数個分のオブジェクトを配列の要素とする。
+\begin{lstlisting}
++--------+--------+--------+================+
+|  0xdc  |XXXXXXXX|XXXXXXXX|   N objects    |
++--------+--------+--------+================+
+
++--------+--------+--------+--------+--------+================+
+|  0xdd  |XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|   N objects    |
++--------+--------+--------+--------+--------+================+
+\end{lstlisting}
+
+
+\section{Map}
+Mapは、3種類の表現形式を持つようにした。
+
+\subsection{FixMap}
+FixMapは、最大15要素の連想配列を保存する。先頭の1バイトで要素数を表し、後続する(要素数×2)個のオブジェクトを連想配列の要素とする。奇数番目のオブジェクトは連想配列のキーを表し、その次のオブジェクトはそのキーに対応する値を表す。先頭の1バイトのうち、先頭の4ビットは1000で、後続するビットで要素数を表す。
+
+\begin{lstlisting}
++--------+================+
+|1000XXXX|  N*2 objects   |
++--------+================+
+\end{lstlisting}
+
+\subsection{map 16、map 32}
+map 16、map 32は、それぞれ最大$(2^{16})-1$要素、$(2^{32})-1$要素の連想配列を保存する。先頭の1バイトはそれぞれ0xde、0xdfで、続く2バイトまたは4バイトで要素数を表し、後続する(要素数×)2個のオブジェクトを連想配列の要素とする。奇数番目のオブジェクトは連想配列のキーを表し、その次のオブジェクトはそのキーに対応する値を表す。
+\begin{lstlisting}
++--------+--------+--------+================+
+|  0xde  |XXXXXXXX|XXXXXXXX|   N*2 objects  |
++--------+--------+--------+================+
+
++--------+--------+--------+--------+--------+================+
+|  0xdf  |XXXXXXXX|XXXXXXXX|XXXXXXXX|XXXXXXXX|   N*2 objects  |
++--------+--------+--------+--------+--------+================+
+\end{lstlisting}
+

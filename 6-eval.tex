@@ -1,0 +1,413 @@
+
+\chapter{評価}
+
+本章では、MessagePackの評価を行う。
+
+
+\section{機能評価}
+
+\subsection{異種の言語をまたいだメッセージの交換}
+MessagePackを用いて、異種のプログラミング言語をまたいでメッセージを交換できることを確認した。
+
+Rubyでメッセージをシリアライズしてファイルに書き出すプログラムを次に示す。
+
+\begin{lstlisting}
+require 'msgpack'
+data = MessagePack.pack([1,2,3])
+File.open('data.msg', 'wb') {|f| f.write data }
+\end{lstlisting}
+
+シリアライズされてファイルに書き出されたメッセージを、Javaで読み出してデシリアライズする例を次に示す。
+
+\begin{lstlisting}
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.BufferedInputStream;
+import java.io.InputStream;
+import org.msgpack.MessagePack;
+import org.msgpack.type.Value;
+
+public class Main {
+    public static void main(String[] args) throws Exception {
+        InputStream in = new BufferedInputStream(
+                new FileInputStream(new File("data.msg")));
+        Value array = new MessagePack().read(in);
+        System.out.println("deserialized: "+array);  //=> deserialized: [1,2,3]
+    }
+}
+\end{lstlisting}
+
+MessagePackのモデルによって、異種のプログラミング言語をまたいでメッセージを交換できることを確認できた。
+
+
+\subsection{移植性}
+
+多種のプログラミング言語を横断してメッセージを交換する本研究の目的を達成するためには、他言語への実装の移植が容易でなければならない。現在確認しているMessagePackの各言語の実装状況を表\ref{table-porting}に示す。
+
+\begin{table}[]
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+            & \shortstack{シリアライザと\\デシリアライザ} & \shortstack{動的型付け\\言語} & \shortstack{動的型付け\\オブジェクト} & \shortstack{拡張可能な\\型変換テンプレート} \\ \hline \hline
+C           & \checkmark &            & \checkmark &            \\ \hline
+C++         & \checkmark &            & \checkmark & \checkmark \\ \hline
+C\#         & \checkmark &            &            &            \\ \hline
+D           & \checkmark &            & \checkmark & \checkmark \\ \hline
+Go          & \checkmark &            &            &            \\ \hline
+Haskell     & \checkmark &            & \checkmark & \checkmark \\ \hline
+Java        & \checkmark &            & \checkmark & \checkmark \\ \hline
+OCaml       & \checkmark &            & \checkmark &            \\ \hline
+Scala       & \checkmark &            & \checkmark & \checkmark \\ \hline
+Common Lisp & \checkmark & \checkmark &            &            \\ \hline
+Erlang      & \checkmark & \checkmark &            &            \\ \hline
+JavaScript  & \checkmark & \checkmark &            &            \\ \hline
+Lua         & \checkmark & \checkmark &            &            \\ \hline
+Objective-C & \checkmark & \checkmark &            &            \\ \hline
+JRuby       & \checkmark & \checkmark &            &            \\ \hline
+Node.JS     & \checkmark & \checkmark &            &            \\ \hline
+Perl        & \checkmark & \checkmark &            &            \\ \hline
+PHP         & \checkmark & \checkmark &            &            \\ \hline
+Python      & \checkmark & \checkmark &            &            \\ \hline
+Ruby        & \checkmark & \checkmark &            &            \\ \hline
+Smalltalk   & \checkmark & \checkmark &            &            \\ \hline
+%C           \cite{MessagePackURL}           &            & \checkmark & \checkmark &            \\ \hline
+%C++         \cite{MessagePackURL}           &            & \checkmark & \checkmark & \checkmark \\ \hline
+%C\#         \cite{MessagePackURL}           &            & \checkmark &            &            \\ \hline
+%D           \cite{MessagePackDURL}          &            & \checkmark & \checkmark & \checkmark \\ \hline
+%Go          \cite{MessagePackURL}           &            & \checkmark &            &            \\ \hline
+%Haskell     \cite{MessagePackHaskellURL}    &            & \checkmark & \checkmark & \checkmark \\ \hline
+%Java        \cite{MessagePackJavaURL}       &            & \checkmark & \checkmark & \checkmark \\ \hline
+%OCaml       \cite{MessagePackURL}           &            & \checkmark & \checkmark &            \\ \hline
+%Scala       \cite{MessagePackScalaURL}      &            & \checkmark & \checkmark & \checkmark \\ \hline
+%Common Lisp \cite{MessagePackCommonLispURL} & \checkmark & \checkmark &            &            \\ \hline
+%Erlang      \cite{MessagePackErlangURL}     & \checkmark & \checkmark &            &            \\ \hline
+%JavaScript  \cite{MessagePackJavaScriptURL} & \checkmark & \checkmark &            &            \\ \hline
+%Lua         \cite{MessagePackLuaURL}        & \checkmark & \checkmark &            &            \\ \hline
+%Objective-C \cite{MessagePackObjectiveCURL} & \checkmark & \checkmark &            &            \\ \hline
+%JRuby       \cite{MessagePackRubyURL}       & \checkmark & \checkmark &            &            \\ \hline
+%Node.JS     \cite{MessagePackURL}           & \checkmark & \checkmark &            &            \\ \hline
+%Perl        \cite{MessagePackPerlURL}       & \checkmark & \checkmark &            &            \\ \hline
+%PHP         \cite{MessagePackURL}           & \checkmark & \checkmark &            &            \\ \hline
+%Python      \cite{MessagePackPythonURL}     & \checkmark & \checkmark &            &            \\ \hline
+%Ruby        \cite{MessagePackRubyURL}       & \checkmark & \checkmark &            &            \\ \hline
+%Smalltalk   \cite{MessagePackSmalltalkURL}  & \checkmark & \checkmark &            &            \\ \hline
+\end{tabular}
+\caption{MessagePackの各言語の実装状況\label{table-porting}}
+\end{table}
+
+%TODO Konoha版 http://code.google.com/p/konoha/source/detail?r=573
+
+それぞれの実装は、必ずしもMessagePackのすべての機能を実装していない。しかし、シリアライザとデシリアライザはすべての言語で実装されている。4章で述べたように、MessagePackのすべての機能を実装することは難しいが、MessagePackを最低限利用可能にする実装は簡単であることが、多言語対応を容易にしていることを確認した。
+
+また、多くのプログラミング言語をまたいで利用することを目的としたシリアライズ形式を含んだシステムであるAvroおよびProtocol Buffersについて、それらを利用可能な言語の一覧を以下に示す。
+
+\begin{description}
+\item [Avro] C, Java, Python
+\item [Protocol Buffers] C++, Java, PHP, Python, Ruby
+\end{description}
+
+MessagePackは、これらのシリアライズ形式と比較して対応している言語が多い。
+MessagePackによってより多くのプログラミング言語を横断してメッセージを交換することが可能になり、本研究の目的が達成された。
+
+\subsection{動的型付けオブジェクトAPI}
+MessagePackでは、MessagePackの型システムに基づいた動的型付けオブジェクトAPIを提供することによって、4.1節で述べたように、静的型付け言語においてもオブジェクトの型を利用した柔軟なプログラミングが可能にした。
+このような動的型付けオブジェクトAPIは、他のシリアライズシステムには存在しない。
+
+\subsection{型変換テンプレート}
+MessagePackでは、デシリアライズされた動的型付けオブジェクトを静的に宣言された型に変換するAPIをライブラリとして提供した。これにより、4.2節で述べたように、型検査を行うプログラムを自分で記述することなく、デシリアライズされたオブジェクトを静的な型に変換して安全に扱うことが可能になった。
+このように動的型付けオブジェクトを静的な型に変換する体系化された機構は、他のシリアライズシステムには存在しない。
+
+
+\section{性能評価}
+
+\subsection{C,C++実装の性能評価}
+
+%\subsubsection{Protocol Buffersとの比較}
+%
+%MessagePackと、Protocol Buffersの比較について述べる。
+%%MessagePack-RPCと同様に、多言語をまたいで利用することができ、高速に動作することを重視したRPCシステムには、ThriftとProtocol Buffersがある。つまりThrift、Protocol BuffersおよびMessagePack-RPCは、似たシステムだと言える。この中で、ThriftはRPCシステムとシリアライズ機能が密に結合しており、シリアライズ機能をRPCシステムから切り離して簡単に使うことができない。Protocol BuffersとMessagePack-RPCは、シリアライズ機能を切り離して利用することができる。このため、ここではProtocol Buffersとの比較を行った。
+%
+%ここでは整数と文字列について、それぞれシリアライズ後のデータサイズ、シリアライズ速度、デシリアライズ速度を測定した。MessagePackでは、デシリアライズを行う際に型変換も行っている。整数に関する測定では、2つの符号付き整数を含むオブジェクトを、$2^{23}$個含んだ配列をシリアライズ・デシリアライズして測定した。文字列に関する測定では、8KBの文字列を$2^{15}個$含んだ配列をシリアライズ・デシリアライズして測定した。プログラミング言語にはC++言語を用いた。測定に用いたハードウェアとソフトウェアを次に示す。
+%
+%{\footnotesize
+%\begin{description}
+%\item [CPU] AMD Athlon64 X2 5000+
+%\item [メモリ] DDR2 8GB
+%\item [MessagePackのバージョン] msgpack-0.2.0
+%\item [Protocol Buffersのバージョン] protobuf-r74
+%\item [コンパイラのバージョン] g++-4.3
+%\end{description}
+%}
+%
+%得られた結果を図\ref{graph2-protobuf-int}と図\ref{graph2-protobuf-string}に示す。
+%
+%図\ref{graph2-protobuf-int}は、整数に関する測定を行った結果である。シリアライズを行ったあとのサイズは、MessagePackはProtocol Buffersと比の6分の1以下に小さく抑えられていることが分かる。これは、Protocol Buffers が整数をシリアライズする保存形式よりも、MessagePack が整数をシリアライズする保存形式の方が、サイズを小さくできるようになっているためである。整数のデシリアライズでは、MessagePackよりProtocol Buffersの方が2倍以上速い。これは、MessagePackでは、デシリアライズ処理自体を行ってから、型変換を行っているためだと考えられる。Java実装に導入した直接型変換をC++にも実装することで、これを改善できると考えられる。
+%%またシリアライズの速度は、Protocol BuffersよりもMessagePackの方が早い。しかしデシリアライズに関しては、Protocol Buffersの方が速い。
+%
+%図\ref{graph2-protobuf-string}は、文字列に関する測定を行った結果である。サイズはProtocol BuffersとMessagePackでほとんど差はない。これは、保存形式に差があったとしても、文字列自体のサイズの方が支配的であるためである。シリアライズする速度は、MessagePackの方が3倍以上高速である。これは、ストリームシリアライザの実行時の効率が優れているためだと考えられる。また、デシリアライズする速度は、MessagePackの方が70倍以上高速である。これは、MessagePackはデシリアライズする際に文字列をコピーしないためである。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.6]{graph2-protobuf-int.eps}
+%\caption{整数のシリアライズ・デシリアライズ\label{graph2-protobuf-int}}
+%\end{center}
+%\end{figure}
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.6]{graph2-protobuf-string.eps}
+%\caption{文字列のシリアライズ・デシリアライズ\label{graph2-protobuf-string}}
+%\end{center}
+%\end{figure}
+%
+%
+%%TODO \subsubsection{インライン化の効果}
+
+
+\subsubsection{メモリゾーンの効果}
+
+C実装のメモリゾーンの実装の性能を確認するため、C実装のメモリゾーンの性能を測定した。
+メモリゾーンを使ってメモリを確保する速度と、malloc関数を使ってメモリを確保する速度をそれぞれ測定した。128バイトのメモリを100万回確保する速度を計測することで、128バイトのメモリを1回確保するのにかかる時間を算出した。測定に用いたハードウェアおよびソフトウェアを次に示す%。プログラミング言語にはCを用いた。
+
+{\footnotesize
+\begin{description}
+\item [CPU] AMD Athlon64 X2 5000+
+\item [メモリ] DDR2 8GB
+\item [mallocの実装] glibc-2.8
+\end{description}
+}
+
+得られた結果を図\ref{graph2-misc-zone}に示す。メモリゾーンは、malloc関数と比べて60倍以上高速であることが分かる。これは、malloc関数は複数のスレッドから実行されることを含めて、汎用的に実装されていなければならないのに対し、メモリゾーンは単一のスレッドからのみ利用でき、MessagePackの内部でのみ利用できれば十分であることから、排他制御などの処理を省略しているためだと考えられる。
+
+%るように制限することで、メモリを確保するときに排他制御を行っていないためだと考えられる。
+
+%またこのとき、1つのメモリゾーンは、同時に1つのスレッドからのみ利用される。このため、メモリゾーンからメモリを切り出すときには、排他制御が必要ない。このため、高速にメモリを切り出すことができる。メモリゾーンからメモリを確保する速度と、mallocを使ってメモリを確保する速度を比較した結果を、図\ref{figure-misc-zone}に示す。これは、128バイトのメモリを100万回確保する速度を計測することで、128バイトのメモリを1回するのにかかる時間を計測したものである。ここで実装したメモリゾーン（msgpack\_zone）は、mallocと比べてずっと高速であることが分かる。
+
+\begin{figure}[]
+\begin{center}
+\includegraphics[scale=0.7]{graph2-misc-zone.eps}
+\caption{malloc関数とメモリゾーンの比較\label{graph2-misc-zone}}
+\end{center}
+\end{figure}
+
+
+\subsection{Ruby実装の性能評価}
+
+Ruby実装の最適化の効果を確認するため、Rubyの処理系に同梱されているJSON処理系と性能を比較した。
+測定に用いたハードウェアを次に示す。
+
+{\footnotesize
+\begin{description}
+\item [CPU] Intel Core i7 1.8GHz
+\item [メモリ] DDR3 4GB
+\item [OS] Mac OS X 10.7.2
+\item [Ruby処理系] ruby 1.9.2p290
+\end{description}
+}
+
+"1"から"4194304"までの連番の文字列を含む配列オブジェクトをJSONとMessagePackを使用してシリアライズ・デシリアライズする処理にかかった時間と、シリアライズされたデータのサイズを計測した。得られた結果を図\ref{graph2-ruby}に示す。
+
+\begin{figure}[]
+\begin{center}
+\includegraphics[scale=0.6]{graph2-ruby.eps}
+\caption{Ruby版の性能評価\label{graph2-ruby}}
+\end{center}
+\end{figure}
+
+JSONと比較すると、シリアライズとデシリアライズにかかる時間は5分の1に以下であった。実装の最適化が効果を発揮していると考えられる。
+またシリアライズ後のデータサイズは、JSONと比較して約20\%小さい。MessagePackはJSONと同様にシリアライズされたオブジェクトの型に関する情報を格納するが、よりコンパクトに格納できるようにする表現形式の設計が効果を発揮していると考えられる。
+
+
+\subsection{Java実装の性能評価}
+
+Java実装の最適化の効果を確認するため、シリアライズおよびデシリアライズの性能を測定した。測定には、JVM上で動作するシリアライズライブラリの性能測定ツールであるjvm-serializers\cite{JVMSerializers}を使用し、Avro、Protocol Buffers、ThriftおよびJSONとの性能を比較した。jvm-serializersは、整数、文字列、浮動小数点数などからなるオブジェクトを繰り返しシリアライズ・デシリアライズするためにかかった時間を測定することで、あるシリアライズライブラリが1つのオブジェクトを1回シリアライズ・デシリアライズするのに必要な時間を算出する。
+測定に用いたハードウェアおよびソフトウェアを次に示す。
+
+{\footnotesize
+\begin{description}
+\item [CPU] Intel Core i7 1.8GHz
+\item [メモリ] DDR3 4GB
+\item [OS] Mac OS X 10.7.2
+\end{description}
+}
+
+得られた結果を図\ref{jvm-serializers-total}と図\ref{jvm-serializers-size}と示す。
+
+\begin{figure}[]
+\begin{center}
+\includegraphics[scale=0.7]{jvm-serializers-total.eps}
+\caption{シリアライズとデシリアライズの実行時間(単位:ナノ秒)\label{jvm-serializers-total}}
+\end{center}
+\end{figure}
+
+\begin{figure}[]
+\begin{center}
+\includegraphics[scale=0.7]{jvm-serializers-size.eps}
+\caption{シリアライズ後のデータの大きさ(単位:バイト)\label{jvm-serializers-size}}
+\end{center}
+\end{figure}
+
+処理時間では、他のシリアライズライブラリと比べても高速であることが確認できた。
+また、シリアライズ後のデータサイズは、型情報をシリアライズ後のデータの中に含めないシリアライズ形式（Avro, Protocol Buffers, Thrift）と比較しても、十分小さいことが確認できた。Avroはシリアライズ後のデータの先頭にIDLを付与することができるが、この性能評価では付与されていない。
+
+実装の性能最適化によって、効率の良いメッセージ交換手法を提供する本研究の目的を達成できた。
+
+%\subsubsection{直接型変換}
+%
+%TODO Java, Dでは、動的型付けオブジェクトを経由せずに、直接静的に宣言された型に変換することで、中間オブジェクトの生成コストを削減する最適化を導入している。実例を示す。
+
+
+% RPC
+%\subsection{MessagePack-RPCの性能評価}
+%
+%\subsubsection{文字列を送受信するオーバーヘッド}
+%
+%ここでは、MessagePack-RPCを使って文字列を送受信する際のオーバーヘッドについて評価する。
+%
+%まず、MessagePack-RPC、Thrift、SunRPCおよびXML-RPCを使って、送られてきたメッセージを送り返すだけのサーバプログラムを実装した。また、これに対応するクライアントプログラムを実装した。このプログラムは、データのシリアライズと送受信にかかる負荷以外の負荷がほぼ発生しない。
+%
+%次に、サーバプログラムとクライアントプログラムを1台のホスト上で動作させ、メッセージを100回送受信するのにかかった時間を計測することで、メッセージを1回送受信するのにかかった時間を算出した。1台のホストで動かすため、ネットワーク通信に要する遅延は発生しない。メッセージには、1KBの文字列、2048KBの文字列、4096KBの文字列、6144KBの文字列を用いた。プログラミング言語にはC++言語を用いた。
+%
+%測定に用いたハードウェアとソフトウェアを次に示す。
+%
+%{\footnotesize
+%\begin{description}
+%\item [CPU] Intel Xeon X5570 ×2（合計8コア）
+%\item [メモリ] 12GB
+%\item [MessagePack-RPCの実装] msgpack-rpc-0.0.0
+%\item [Thriftの実装] thrift-0.2.0
+%\item [SunRPCの実装] Linuxのユーザ空間で動作する実装
+%\item [XML-RPCの実装] ulxmlrpcpp-1.7.5
+%\item [コンパイラのバージョン] g++-4.1
+%\end{description}
+%}
+%
+%得られた結果を図\ref{graph2-string-overhead}に示す。
+%図\ref{graph2-string-overhead}左からは、XML-RPCではオーバーヘッドが非常に大きいことが分かる。これはXMLの作成と解析に要するオーバーヘッドが大きいためだと考えられる。
+%図\ref{graph2-string-overhead}左では、XML-RPC以外の違いが分かりにくいため、図\ref{graph2-string-overhead}右にXML-RPCの結果を除いたものを示した。Thriftは、SunRPCとMessagePack-RPCと比べて、オーバーヘッドが大きいことが分かる。これはThriftは文字列をデシリアライズする際にコピーするためだと考えられる。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.6]{graph2-string-overhead.eps}
+%\caption{文字列を送受信するオーバーヘッド\label{graph2-string-overhead}}
+%\end{center}
+%\end{figure}
+%
+%\subsubsection{要求の並列化}
+%
+%ここでは、MessagePack-RPCの非同期型呼び出し機能によって要求を並列処理できることの有効性について評価する。
+%%を使って複数のRPC呼び出しを並列して行う際の性能について評価する。
+%
+%まず、MessagePack-RPC、ThriftおよびSunRPCを使って、送られてきた文字列の形態素解析を行うサーバプログラムを実装した。また、これに対応するクライアントプログラムを実装した。このプログラムは、サーバのCPUの負荷が高い。このためサーバプログラムは、要求を並列して処理しなければ、応答を早く返すことができない。プログラミング言語にはC++言語を用いた。形態素解析を行うには、MeCab\cite{mecabURL}を利用した。
+%
+%次に、サーバプログラムとクライアントプログラムを別々のホストで動作させた。クライアントプログラムは、まず1本のコネクションで、1回、8回、16回、24回の要求を送信する。このとき要求を並列して送信できる場合は並列して送信する。次に、1本、8本、16本、24本のコネクションを使って、1回、8回、16回、24回の要求を送信する。このとき要求は並列して送信する。それぞれ100回ずつ繰り返すのにかかった時間を計測した。
+%
+%測定に用いたハードウェアとソフトウェアは、文字列を送受信のオーバーヘッドを測定した環境と同じである。
+%
+%得られた結果を図\ref{graph2-parallel-pipeline}と図\ref{graph2-parallel-thread}に示す。
+%
+%図\ref{graph2-parallel-pipeline}は、コネクション数が1本の場合である。SunRPCが最も遅く、MessagePack-RPCが最も速いという結果が得られた。SunRPCは、要求を並列して送信することができない。Thriftは、クライアントは要求を並列して送信することができるが、サーバはそれらの要求を並列して処理することができない。MessagePack-RPCは、クライアントが要求を並列して送信できるのに加えて、サーバはそららの要求を並列して処理することができる。
+%
+%図\ref{graph2-parallel-thread}は、複数のコネクションを使った場合である。SunRPCだけが遅いという結果が得られた。Linuxのユーザ空間で動作するSunRPCの実装は、単一のプロセスで単一のスレッドを使って動作するため、要求を並列して処理することができない。ThriftとMessagePack-RPCは、複数のスレッドを使って要求を並列して処理する。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.7]{graph2-parallel-pipeline.eps}
+%\caption{要求の並列化\label{graph2-parallel-pipeline}}
+%\end{center}
+%\end{figure}
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.7]{graph2-parallel-thread.eps}
+%\caption{要求の並列化\label{graph2-parallel-thread}}
+%\end{center}
+%\end{figure}
+%
+%
+%\subsubsection{コネクションプーリングの利用}
+%
+%ここでは、複数のスレッドがコネクションプールを共有してRPC呼び出しを行う性能について評価する。
+%
+%クライアントからの要求を、別の不特定多数のサーバプログラムに転送するような、プロキシの役割を持ったサーバプログラムが必要になる場合がある。例えば、前述したkumofsは、このようなプログラムを含んでいる。このようなプログラムでは、1本のコネクションを複数のスレッドが同時に利用できるようになっていると、RPC呼び出しを行うたびにコネクションを張り直す必要が無くなる。MessagePack-RPCは、これを行うことができる。
+%
+%そこで、MessagePack-RPCではこの機能を使った状態で、MessagePack-RPC、SunRPCおよびThriftの3つのRPCシステムで、1回のRPC呼び出しにかかる時間を測定した。
+%
+%測定には、前述した文字列を送受信のオーバーヘッドを測定したプログラムと同じプログラムを利用した。このサーバプログラムとクライアントプログラムを別々のホストで実行した。1万回メッセージを送受信するのにかかる時間を測定することで、1回メッセージを送受信するのにかかる時間を算出した。メッセージには、1バイトの文字列、64KBの文字列、128KBの文字列を用いた。
+%
+%測定に用いたハードウェアとソフトウェアは、文字列を送受信のオーバーヘッドを測定した環境と同じである。
+%
+%得られた結果を図\ref{graph2-connect-latency}に示す。
+%MessagePack-RPCが最も高速であることが分かる。MessagePack-RPCではコネクションを共有することで、コネクションの確立にかかる遅延が削減されているためだと考えられる。この差は、メッセージのサイズが大きくなると小さくなっていく。これは、メッセージのサイズが小さくなるほど、全体の時間に占めるメッセージの送受信自体にかかる割合が増えていくためだと考えられる。
+%
+%\begin{figure}[]
+%\begin{center}
+%\includegraphics[scale=0.6]{graph2-connect-latency.eps}
+%\caption{RPC呼び出しにかかる時間\label{graph2-connect-latency}}
+%\end{center}
+%\end{figure}
+
+
+\clearpage
+
+\section{アプリケーションの開発}
+
+MessagePackを使用して実際的なアプリケーションを設計、開発、運用および継続的な更新をすることによって、異種のプログラミング言語・異種の計算機環境・異種のバージョン間で互換性を維持しながら利用可能であり、高い相互運用性を実現できたことを確認した。
+
+\subsection{kumofs}
+
+kumofs\cite{kumofsURL}は、高い耐障害性と並列性を重視した分散データストアである。Consistent Hashingによる分散とレプリケーションを実装している。C++とRubyの2つの言語を用いて実装し、ノード間の通信プロトコルにMessagePackを使用した。アーキテクチャを図\ref{figure2-kumofs}に示す。
+
+\begin{figure}[]
+\begin{center}
+\includegraphics[scale=0.7]{figure2-kumofs.eps}
+\caption{kumofs\label{figure2-kumofs}}
+\end{center}
+\end{figure}
+
+MessagePackの動的型付けの特性を利用して、過去のバージョンと通信プロトコルの互換性を維持したまま、ソフトウェアのバージョンアップを可能とした。これに加え、kumofsはシステムに参加するノードの一部が故障しても正常な動作を継続できる耐障害性を備えていることから、ノードを一度に再起動するのではなく次々に再起動していくことで、システム全体を停止させることなくソフトウェアのバージョンアップを行うことが可能になった。
+
+また、kumofsはデータストアであることから、比較的サイズの大きいデータを扱うが、MessagePackのC++実装の最適化により、プログラム内でコピーすることなく効率的に扱うことができる。これによって高い性能を発揮することが可能になった。
+
+さらにkumofsは、複数の言語の特性を活かして実装した。データの保存と検索を行うサーバ群はC++で実装したが、それらを一括して管理するためのツール群はRubyで実装した。これにより、サーバ群は極めて高速に動作させることができた一方で、管理ツール群の実装と拡張が容易になった。
+
+kumofsでは、MessagePackを利用することによって無停止でシステムのバージョンアップを可能にし、また高い性能を発揮することができた。また、多言語間通信が可能であることから、2つの言語の利点を組み合わせることで実装の手間を大幅に簡略化することができた。
+
+%図
+%どこでMessagePackを使っているか
+%MessagePackがどのように性能向上に寄与しているか
+%MessagePackによってどのように実装コストが削減されたか
+
+
+\subsection{LS4}
+
+LS4\cite{LS4URL}は、高い耐障害性とスループットを重視した分散ストレージシステムである。ロードバランスとマスタ・スレーブ型のレプリケーションを実装している。Rubyを用いて実装し、ノード間の通信プロトコルとメタデータの表現形式にMessagePackを用いた。アーキテクチャを図\ref{figure2-ls4}に示す。
+
+\begin{figure}[]
+\begin{center}
+\includegraphics[scale=0.7]{figure2-ls4.eps}
+\caption{LS4\label{figure2-ls4}}
+\end{center}
+\end{figure}
+
+LS4は、Webアプリケーションから直接利用されることを想定したシステムであることから、スクリプト言語を含む多くの言語から利用できる通信プロトコルを採用する必要があった。一方で、写真や動画などのサイズの大きいデータを扱うシステムであることから、バイナリ形式で効率の良い通信プロトコルが必要であった。MessagePackを使用することで、これらの条件を容易に満たすことができた。
+
+またLS4では、高い耐障害性を実現するためにレプリケーション機能を実装したが、レプリケーション・ログの表現形式にMessagePackを用いた。プログラムの更新に伴って、レプリケーション・ログの構造を変更しなければならない機会があったが、MessagePackの動的型付けの柔軟性を使用することによって、過去に作成されたレプリケーション・ログとの互換性を維持したまま更新することが可能であった。
+
+
+\subsection{Fluentd}
+
+Fluentd\cite{FluentdURL}は、プラグイン構造を採用したイベントログ収集ツールである。Rubyを用いて実装し、プラグイン間のインタフェースにMessagePackを用いた。アーキテクチャを図\ref{figure2-fluentd}に示す。
+
+\begin{figure}[]
+\begin{center}
+\includegraphics[scale=0.7]{figure2-fluentd.eps}
+\caption{Fluentd\label{figure2-fluentd}}
+\end{center}
+\end{figure}
+
+Fluentdは、入力、出力、そしてバッファリングの3種類のプラグインを組み合わせることによって、様々な目的で利用できるという特徴を持つツールである。Fluentdの中核は、それらのプラグイン間の連携を調停する枠組みである。このようなプラグイン構造を採用するプログラムでは、プラグイン間のインタフェースの設計が拡張可能性を大きく左右するが、FluentdはMessagePackを利用することによって、高いスループットとAPIのシンプルさを実現することができた。また、様々なプログラミング言語を用いてプラグインを開発することが可能になった。
+
+さらに、MessagePackの型システムはJSONの型システムと互換性が高いことから、他のシステムとのインタフェースとしてMessagePackの代わりにJSONを選択可能にすることにより、型システムを相互変換するプログラムを実装することなく相互運用性を高めることが可能になった。
+
+
+%MessagePackの使用を前提として設計および実装を行った。

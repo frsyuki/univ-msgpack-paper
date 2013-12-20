@@ -1,0 +1,88 @@
+%% definition of title
+\newdimen\vspacetitle \newdimen\vspaceabstract
+\vspacetitle=0.5\textheight
+\vspaceabstract=0.5\textheight
+
+%\def\etitle#1{\gdef\@etitle{#1}}
+\def\advisor#1{\gdef\@advisor{#1}}
+\def\majorfield#1{\gdef\@majorfield{#1}}
+\def\abstract#1{\gdef\@abstract{#1}}
+\def\yearandmonth#1{\gdef\@yearandmonth{#1}}
+\def\keywords#1{\gdef\@keywords{#1}}
+
+\def\keywordsname{\bf Key Words : }
+%
+
+\def\maketitle{\par
+\begingroup
+\def\@makefnmark{\hbox
+     to\z@{$\m@th^{\@thefnmark}$\hss}}%
+\if@twocolumn
+\twocolumn[\@maketitle]
+\else
+%\newpage
+\global\@topnum\z@
+\@maketitle \fi\thispagestyle{plain}\@thanks
+\endgroup
+
+\let\maketitle\relax
+\let\@maketitle\relax
+\gdef\@abstract{}\gdef\@keywords{}
+\let\abstract\relax \let\keywords\relax
+\let\etitle\relax\gdef\@etitle{}
+\let\majorfield\relax\gdef\@majorfield{}
+\gdef\@thanks{}\gdef\@author{}\gdef\@title{}\let\thanks\relax}
+
+\def\@maketitle{
+\newpage\null
+\vbox to \vspacetitle{
+\thispagestyle{empty}
+%\fbox{
+\begin{minipage}{6in}
+\begin{center}
+\vspace*{2cm}
+{\Large ÃÞÇÈÂç³ØÂç³Ø±¡Çî»Î²ÝÄø}
+
+\vspace{1cm}
+{\Large ¥·¥¹¥Æ¥à¾ðÊó¹©³Ø¸¦µæ²Ê½¤»ÎÏÀÊ¸}
+
+\vspace{2.4cm}
+{\huge \baselineskip 1.5em \@title\\} \vfill
+
+\vspace{6cm plus 2cm minus 2cm}
+
+{\huge \@author}
+
+\vspace{5mm}
+
+{\LARGE (\@majorfield Àì¹¶) } 
+\vspace{1cm}
+
+{\LARGE »ØÆ³¶µ°÷ ~ \@advisor}
+\vspace{1cm}
+
+{\LARGE \@yearandmonth}
+%\vspace{2cm}
+~
+\end{center}
+\end{minipage}
+}
+%}%end of fbox
+% \vbox to \vspaceabstract{\vfill
+% \@ifundefined{@abstract}{}{
+% \begin{list}{}{\setlength{\leftmargin}{0.15\textwidth}
+% \topsep=0pt \partopsep=0pt \listparindent=1em \parsep=0pt
+% \setlength{\rightmargin}{\leftmargin}
+% \setlength{\baselineskip}{0.8\normalbaselineskip}}
+% \item {\small \@abstract}
+% \@ifundefined{@keywords}{}{
+% \begin{list}{\keywordsname}{
+% \topsep=-0.8\parskip \partopsep=0pt
+% \settowidth{\labelwidth}{\keywordsname}
+% \settowidth{\leftmargin}{1.1\keywordsname}
+% \setlength{\baselineskip}{0.8\normalbaselineskip}}
+% \item {\small\it\@keywords}
+% \end{list}}
+% \end{list}}
+% \par \vfill}
+}
